@@ -277,23 +277,28 @@ ps aux | grep VideoSDKQtDemo
 
 ```
 videosdk-linux-qt-quickstart/
-├── CMakeLists.txt              # Qt-based build configuration
-├── config.json                 # Session configuration
 ├── README.md                   # This documentation
 ├── run_qt_demo.sh              # Wrapper script for running the application
+├── run_simple_join.sh          # Simple join demo script
+├── build/                      # CMake build directory (created during build)
 └── src/                        # All project files organized here
+    ├── CMakeLists.txt          # Qt-based build configuration
+    ├── config.json             # Session configuration template
     ├── bin/                    # Build output directory
     │   ├── VideoSDKQtDemo      # Main executable
-    │   ├── config.json         # Copied session configuration
+    │   ├── config.json         # Runtime session configuration
     │   └── *.so                # Required libraries
-    ├── build/                  # CMake build directory
+    ├── build/                  # Source build directory
     ├── include/                # Zoom SDK headers and dependencies
     ├── lib/                    # Zoom SDK libraries and build artifacts
-    └── Source code
-        ├── zoom_v-sdk_linux_bot_qt.cpp    # Main application
+    └── Source Files:
+        ├── zoom_v-sdk_linux_bot_qt.cpp    # Main application entry point
         ├── QtMainWindow.h/cpp             # Main window implementation
         ├── QtVideoWidget.h/cpp            # Video display widget
-        └── QtVideoRenderer.h/cpp          # Video rendering logic
+        ├── QtVideoRenderer.h/cpp          # Video rendering logic
+        ├── QtPreviewVideoHandler.h/cpp    # Self video preview handler
+        ├── QtRemoteVideoHandler.h/cpp     # Remote video stream handler
+        └── simple_join.cpp               # Simple console demo
 ```
 
 ## Key Differences from GTK Version
@@ -318,7 +323,7 @@ videosdk-linux-qt-quickstart/
 
 ## Configuration
 
-The application reads session configuration from `config.json`:
+The application reads session configuration from `src/bin/config.json` (copied from `src/config.json` during build):
 
 ```json
 {
@@ -327,6 +332,12 @@ The application reads session configuration from `config.json`:
   "token": "JWT Token for authentication"
 }
 ```
+
+**Configuration Loading Process:**
+1. Application uses `getSelfDirPath()` to find executable directory (`src/bin/`)
+2. Loads `config.json` from the same directory as the executable
+3. CMake automatically copies `src/config.json` to `src/bin/config.json` during build
+4. Edit either `src/config.json` (source) or `src/bin/config.json` (runtime) as needed
 
 ## Troubleshooting
 
