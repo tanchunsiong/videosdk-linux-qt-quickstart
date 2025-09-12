@@ -20,6 +20,10 @@ public:
     void updateButtonStates();
     void populateDeviceDropdowns();
 
+    // Video widget accessors for delegate
+    QtVideoWidget* getSelfVideoWidget() { return m_selfVideoWidget; }
+    QtVideoWidget* getRemoteVideoWidget() { return m_remoteVideoWidget; }
+
 public slots:
     void updateStatus(const QString& message);
 

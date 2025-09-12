@@ -274,6 +274,8 @@ void QtMainWindow::onLeaveSessionClicked()
 
 void QtMainWindow::onMuteAudioClicked()
 {
+    printf("DEBUG: onMuteAudioClicked() called, current state: %s\n", g_audio_muted ? "muted" : "unmuted");
+
     if (video_sdk_obj && g_in_session) {
         IZoomVideoSDKAudioHelper* audioHelper = video_sdk_obj->getAudioHelper();
         if (audioHelper) {
@@ -281,21 +283,52 @@ void QtMainWindow::onMuteAudioClicked()
             if (session) {
                 IZoomVideoSDKUser* currentUser = session->getMyself();
                 if (currentUser) {
+                    printf("DEBUG: Current user obtained: %s\n", currentUser->getUserName());
+
                     if (g_audio_muted) {
-                        audioHelper->unMuteAudio(currentUser);
+                        printf("DEBUG: Calling audioHelper->unMuteAudio()\n");
+                        ZoomVideoSDKErrors err = audioHelper->unMuteAudio(currentUser);
+                        printf("DEBUG: unMuteAudio() returned: %d\n", (int)err);
+                        if (err == ZoomVideoSDKErrors_Success) {
+                            g_audio_muted = false;
+                            updateStatus("Audio unmuted");
+                        } else {
+                            updateStatus("Failed to unmute audio");
+                        }
                     } else {
-                        audioHelper->muteAudio(currentUser);
+                        printf("DEBUG: Calling audioHelper->muteAudio()\n");
+                        ZoomVideoSDKErrors err = audioHelper->muteAudio(currentUser);
+                        printf("DEBUG: muteAudio() returned: %d\n", (int)err);
+                        if (err == ZoomVideoSDKErrors_Success) {
+                            g_audio_muted = true;
+                            updateStatus("Audio muted");
+                        } else {
+                            updateStatus("Failed to mute audio");
+                        }
                     }
-                    g_audio_muted = !g_audio_muted;
                     updateButtonStates();
+                } else {
+                    printf("DEBUG: ERROR - Current user is NULL!\n");
+                    updateStatus("Failed to get current user");
                 }
+            } else {
+                printf("DEBUG: ERROR - Session is NULL!\n");
+                updateStatus("Session not available");
             }
+        } else {
+            printf("DEBUG: ERROR - Audio helper is NULL!\n");
+            updateStatus("Audio helper not available");
         }
+    } else {
+        printf("DEBUG: Not in session or SDK not initialized\n");
+        updateStatus("Not in session or SDK not initialized");
     }
 }
 
 void QtMainWindow::onSelfVideoClicked()
 {
+    printf("DEBUG: onSelfVideoClicked() called, current state: %s\n", m_selfVideoEnabled ? "enabled" : "disabled");
+
     m_selfVideoEnabled = !m_selfVideoEnabled;
     updateButtonStates();
 
@@ -303,13 +336,23 @@ void QtMainWindow::onSelfVideoClicked()
         IZoomVideoSDKVideoHelper* videoHelper = video_sdk_obj->getVideoHelper();
         if (videoHelper) {
             if (m_selfVideoEnabled) {
-                videoHelper->startVideo();
+                printf("DEBUG: Calling videoHelper->startVideo()\n");
+                ZoomVideoSDKErrors err = videoHelper->startVideo();
+                printf("DEBUG: videoHelper->startVideo() returned: %d\n", (int)err);
                 updateStatus("Video started");
             } else {
-                videoHelper->stopVideo();
+                printf("DEBUG: Calling videoHelper->stopVideo()\n");
+                ZoomVideoSDKErrors err = videoHelper->stopVideo();
+                printf("DEBUG: videoHelper->stopVideo() returned: %d\n", (int)err);
                 updateStatus("Video stopped");
             }
+        } else {
+            printf("DEBUG: videoHelper is NULL!\n");
+            updateStatus("Video helper not available");
         }
+    } else {
+        printf("DEBUG: video_sdk_obj=%p, g_in_session=%s\n", video_sdk_obj, g_in_session ? "true" : "false");
+        updateStatus("Not in session or SDK not initialized");
     }
 }
 

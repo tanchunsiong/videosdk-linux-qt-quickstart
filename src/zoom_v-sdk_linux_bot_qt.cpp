@@ -389,6 +389,18 @@ public:
     virtual void onCameraControlRequestResult(IZoomVideoSDKUser* pUser, bool isApproved) {};
     virtual void onCameraControlRequestReceived(IZoomVideoSDKUser* pUser, ZoomVideoSDKCameraControlRequestType requestType, IZoomVideoSDKCameraControlRequestHandler* pCameraControlRequestHandler) {};
 
+    // Video callbacks - currently disabled as they don't work with this SDK build
+    // The GTK version uses PreviewVideoHandler and RemoteVideoRawDataHandler instead
+    virtual void onOneWayVideoRawDataReceived(YUVRawDataI420* data_, IZoomVideoSDKUser* pUser) {
+        // Disabled - raw data callbacks don't work with this SDK build
+        // GTK uses PreviewVideoHandler for self video instead
+    };
+
+    virtual void onMixedVideoRawDataReceived(YUVRawDataI420* data_) {
+        // Disabled - raw data callbacks don't work with this SDK build
+        // GTK uses RemoteVideoRawDataHandler for remote video instead
+    };
+
     // Audio raw data methods
     virtual void onMixedAudioRawDataReceived(AudioRawData* data_) {
         if (data_ && g_audio_playback) {
@@ -520,7 +532,7 @@ void joinVideoSDKSession(const QString& session_name, const QString& session_psw
 
     session_context.userName = "Linux Qt Bot";
     session_context.token = session_token_str.c_str();
-    session_context.videoOption.localVideoOn = true;
+    session_context.videoOption.localVideoOn = false;
     session_context.audioOption.connect = true;
     session_context.audioOption.mute = false;
 
