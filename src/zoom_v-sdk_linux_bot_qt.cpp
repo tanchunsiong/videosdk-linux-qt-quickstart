@@ -20,6 +20,8 @@
 #include "QtMainWindow.h"
 #include "QtVideoWidget.h"
 #include "QtVideoRenderer.h"
+#include "QtRemoteVideoHandler.h"
+#include "QtPreviewVideoHandler.h"
 
 // Test SDK loading without Qt dependencies first
 #include <iostream>
@@ -319,7 +321,46 @@ public:
     // Other delegate methods...
     virtual void onUserJoin(IZoomVideoSDKUserHelper* pUserHelper, IVideoSDKVector<IZoomVideoSDKUser*>* userList) {}
     virtual void onUserLeave(IZoomVideoSDKUserHelper* pUserHelper, IVideoSDKVector<IZoomVideoSDKUser*>* userList) {}
-    virtual void onUserVideoStatusChanged(IZoomVideoSDKVideoHelper* pVideoHelper, IVideoSDKVector<IZoomVideoSDKUser*>* userList) {}
+	virtual void onUserVideoStatusChanged(IZoomVideoSDKVideoHelper* pVideoHelper, IVideoSDKVector<IZoomVideoSDKUser*>* userList) {
+		if (userList && video_sdk_obj && m_mainWindow) {
+			// Get current user to exclude from remote video display
+			IZoomVideoSDKSession* session = video_sdk_obj->getSessionInfo();
+			IZoomVideoSDKUser* myself = session ? session->getMyself() : nullptr;
+
+			int count = userList->GetCount();
+			for (int index = 0; index < count; index++) {
+				IZoomVideoSDKUser* user = userList->GetItem(index);
+				if (user && user != myself) { // Only handle remote users, not myself
+					printf("Video status changed for remote user: %s\n", user->getUserName());
+
+					// Check if user has video enabled
+					if (user->GetVideoPipe()) {
+						printf("User %s has video pipe available - checking for existing handler\n", user->getUserName());
+
+						// TODO: Check if we already have a handler for this user
+						// For now, create new handler (will be fixed to prevent duplicates)
+						if (m_mainWindow->getRemoteVideoWidget()) {
+							QtRemoteVideoHandler* remoteHandler = new QtRemoteVideoHandler(m_mainWindow->getRemoteVideoWidget());
+							if (remoteHandler->SubscribeToUser(user, ZoomVideoSDKResolution_90P)) {
+								printf("Successfully subscribed to remote video for user: %s\n", user->getUserName());
+								// TODO: Store handler in list to prevent duplicates
+							} else {
+								printf("Failed to subscribe to remote video for user: %s\n", user->getUserName());
+								delete remoteHandler;
+							}
+						}
+					} else {
+						printf("User %s has no video pipe - remote video disabled\n", user->getUserName());
+						// TODO: Clean up existing handler for this user
+					}
+				}
+				else if (user == myself)
+				{
+					printf("Self user detected in onUserVideoStatusChanged: %s - using preview handler\n", user->getUserName());
+				}
+			}
+		}
+	}
     virtual void onUserAudioStatusChanged(IZoomVideoSDKAudioHelper* pAudioHelper, IVideoSDKVector<IZoomVideoSDKUser*>* userList) {}
     virtual void onUserShareStatusChanged(IZoomVideoSDKShareHelper* pShareHelper, IZoomVideoSDKUser* pUser, IZoomVideoSDKShareAction* pShareAction) {}
     virtual void onShareContentChanged(IZoomVideoSDKShareHelper* pShareHelper, IZoomVideoSDKUser* pUser, IZoomVideoSDKShareAction* pShareAction) {}
@@ -389,16 +430,84 @@ public:
     virtual void onCameraControlRequestResult(IZoomVideoSDKUser* pUser, bool isApproved) {};
     virtual void onCameraControlRequestReceived(IZoomVideoSDKUser* pUser, ZoomVideoSDKCameraControlRequestType requestType, IZoomVideoSDKCameraControlRequestHandler* pCameraControlRequestHandler) {};
 
-    // Video callbacks - currently disabled as they don't work with this SDK build
-    // The GTK version uses PreviewVideoHandler and RemoteVideoRawDataHandler instead
+    // Video callbacks - try enabling for local video preview
     virtual void onOneWayVideoRawDataReceived(YUVRawDataI420* data_, IZoomVideoSDKUser* pUser) {
-        // Disabled - raw data callbacks don't work with this SDK build
-        // GTK uses PreviewVideoHandler for self video instead
+        if (data_ && pUser && m_mainWindow) {
+            // Check if this is our own video (for preview)
+            IZoomVideoSDKSession* session = video_sdk_obj ? video_sdk_obj->getSessionInfo() : nullptr;
+            IZoomVideoSDKUser* myself = session ? session->getMyself() : nullptr;
+
+            if (pUser == myself) {
+                printf("DEBUG: Received self video frame via callback: %dx%d\n",
+                       data_->GetStreamWidth(), data_->GetStreamHeight());
+
+                // Get YUV data pointers
+                const char* y_data = data_->GetYBuffer();
+                const char* u_data = data_->GetUBuffer();
+                const char* v_data = data_->GetVBuffer();
+
+                if (y_data && u_data && v_data) {
+                    // Get video dimensions
+                    int width = data_->GetStreamWidth();
+                    int height = data_->GetStreamHeight();
+
+                    // Calculate strides (assuming standard YUV420 format)
+                    int y_stride = width;
+                    int u_stride = width / 2;
+                    int v_stride = width / 2;
+
+                    // Get video widget
+                    QtVideoWidget* videoWidget = m_mainWindow->getSelfVideoWidget();
+                    if (videoWidget) {
+                        // Create QtVideoRenderer and render the frame
+                        QtVideoRenderer* renderer = new QtVideoRenderer(videoWidget);
+                        renderer->renderVideoFrame(y_data, u_data, v_data, width, height,
+                                                 y_stride, u_stride, v_stride);
+
+                        static int self_frame_count = 0;
+                        if (++self_frame_count % 30 == 0) {
+                            printf("Processed %d self video frames via callback\n", self_frame_count);
+                        }
+                    }
+                }
+            }
+        }
     };
 
     virtual void onMixedVideoRawDataReceived(YUVRawDataI420* data_) {
-        // Disabled - raw data callbacks don't work with this SDK build
-        // GTK uses RemoteVideoRawDataHandler for remote video instead
+        if (data_ && m_mainWindow) {
+            printf("DEBUG: Received mixed video frame: %dx%d\n", data_->GetStreamWidth(), data_->GetStreamHeight());
+
+            // Get YUV data pointers
+            const char* y_data = data_->GetYBuffer();
+            const char* u_data = data_->GetUBuffer();
+            const char* v_data = data_->GetVBuffer();
+
+            if (y_data && u_data && v_data) {
+                // Get video dimensions
+                int width = data_->GetStreamWidth();
+                int height = data_->GetStreamHeight();
+
+                // Calculate strides (assuming standard YUV420 format)
+                int y_stride = width;
+                int u_stride = width / 2;
+                int v_stride = width / 2;
+
+                // Get video widget
+                QtVideoWidget* videoWidget = m_mainWindow->getRemoteVideoWidget();
+                if (videoWidget) {
+                    // Create QtVideoRenderer and render the frame
+                    QtVideoRenderer* renderer = new QtVideoRenderer(videoWidget);
+                    renderer->renderVideoFrame(y_data, u_data, v_data, width, height,
+                                             y_stride, u_stride, v_stride);
+
+                    static int mixed_frame_count = 0;
+                    if (++mixed_frame_count % 30 == 0) {
+                        printf("Processed %d mixed video frames\n", mixed_frame_count);
+                    }
+                }
+            }
+        }
     };
 
     // Audio raw data methods

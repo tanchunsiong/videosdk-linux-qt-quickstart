@@ -24,6 +24,7 @@ void QtVideoWidget::updateVideoFrame(const QImage& frame)
 {
     QMutexLocker locker(&m_frameMutex);
     m_currentFrame = frame;
+    printf("DEBUG: QtVideoWidget received frame: %dx%d\n", frame.width(), frame.height());
     update(); // Trigger repaint
 }
 

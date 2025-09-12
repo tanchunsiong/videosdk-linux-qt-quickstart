@@ -1,5 +1,6 @@
 #include "QtMainWindow.h"
 #include "QtVideoWidget.h"
+#include "QtPreviewVideoHandler.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
@@ -32,6 +33,7 @@ QtMainWindow::QtMainWindow(QWidget* parent)
     : QMainWindow(parent)
     , m_selfVideoEnabled(false)
     , m_remoteVideoEnabled(true)
+    , m_previewHandler(nullptr)
 {
     setWindowTitle("Zoom Video SDK Qt Demo");
     setMinimumSize(800, 600);
@@ -329,23 +331,52 @@ void QtMainWindow::onSelfVideoClicked()
 {
     printf("DEBUG: onSelfVideoClicked() called, current state: %s\n", m_selfVideoEnabled ? "enabled" : "disabled");
 
-    m_selfVideoEnabled = !m_selfVideoEnabled;
-    updateButtonStates();
-
     if (video_sdk_obj && g_in_session) {
         IZoomVideoSDKVideoHelper* videoHelper = video_sdk_obj->getVideoHelper();
         if (videoHelper) {
             if (m_selfVideoEnabled) {
-                printf("DEBUG: Calling videoHelper->startVideo()\n");
-                ZoomVideoSDKErrors err = videoHelper->startVideo();
-                printf("DEBUG: videoHelper->startVideo() returned: %d\n", (int)err);
-                updateStatus("Video started");
-            } else {
+                // Stop self video: stop transmission and clean up preview handler
                 printf("DEBUG: Calling videoHelper->stopVideo()\n");
                 ZoomVideoSDKErrors err = videoHelper->stopVideo();
                 printf("DEBUG: videoHelper->stopVideo() returned: %d\n", (int)err);
+
+                // Clean up preview handler
+                if (m_previewHandler) {
+                    m_previewHandler->StopPreview();
+                    delete m_previewHandler;
+                    m_previewHandler = nullptr;
+                    printf("DEBUG: Preview handler stopped and cleaned up\n");
+                }
+
+                m_selfVideoEnabled = false;
                 updateStatus("Video stopped");
+            } else {
+                // Start self video: start transmission and create preview handler
+                printf("DEBUG: Calling videoHelper->startVideo()\n");
+                ZoomVideoSDKErrors err = videoHelper->startVideo();
+                printf("DEBUG: videoHelper->startVideo() returned: %d\n", (int)err);
+
+                if (err == ZoomVideoSDKErrors_Success) {
+                    // Create preview handler for self video display
+                    if (!m_previewHandler && m_selfVideoWidget) {
+                        m_previewHandler = new QtPreviewVideoHandler(m_selfVideoWidget);
+                        if (m_previewHandler->StartPreview()) {
+                            printf("DEBUG: Preview handler started successfully\n");
+                            updateStatus("Video started - preview active");
+                        } else {
+                            printf("DEBUG: Failed to start preview handler\n");
+                            delete m_previewHandler;
+                            m_previewHandler = nullptr;
+                            updateStatus("Video started but preview failed");
+                        }
+                    }
+
+                    m_selfVideoEnabled = true;
+                } else {
+                    updateStatus("Failed to start video transmission");
+                }
             }
+            updateButtonStates();
         } else {
             printf("DEBUG: videoHelper is NULL!\n");
             updateStatus("Video helper not available");

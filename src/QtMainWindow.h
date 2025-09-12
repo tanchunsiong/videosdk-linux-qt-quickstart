@@ -8,6 +8,8 @@
 #include <QGroupBox>
 
 class QtVideoWidget;
+class QtPreviewVideoHandler;
+class QtRemoteVideoHandler;
 
 class QtMainWindow : public QMainWindow
 {
@@ -58,6 +60,10 @@ private:
 
     QtVideoWidget* m_selfVideoWidget;
     QtVideoWidget* m_remoteVideoWidget;
+
+    // Video handlers (equivalent to GTK's handlers)
+    QtPreviewVideoHandler* m_previewHandler;
+    QList<QtRemoteVideoHandler*> m_remoteHandlers; // Support multiple remote users
 
     // Video control variables
     bool m_selfVideoEnabled;

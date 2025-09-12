@@ -46,6 +46,8 @@ set(GUI_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/QtVideoRenderer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/QtMainWindow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/QtVideoWidget.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/QtPreviewVideoHandler.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/QtRemoteVideoHandler.cpp
 )
 
 add_executable(${TARGET_NAME}
