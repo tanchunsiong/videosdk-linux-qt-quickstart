@@ -27,9 +27,7 @@ private slots:
     void onJoinSessionClicked();
     void onLeaveSessionClicked();
     void onMuteAudioClicked();
-    void onMuteVideoClicked();
     void onSelfVideoClicked();
-    void onRemoteVideoClicked();
     void onCameraChanged();
     void onMicrophoneChanged();
     void onSpeakerChanged();
@@ -45,9 +43,7 @@ private:
     QPushButton* m_joinButton;
     QPushButton* m_leaveButton;
     QPushButton* m_muteAudioButton;
-    QPushButton* m_muteVideoButton;
     QPushButton* m_selfVideoButton;
-    QPushButton* m_remoteVideoButton;
 
     QComboBox* m_cameraCombo;
     QComboBox* m_microphoneCombo;

@@ -189,6 +189,10 @@ public:
     {
         printf("=== DELEGATE: Session joined successfully ===\n");
 
+        // CRITICAL FIX: Set session state BEFORE updating UI
+        g_in_session = true;
+        printf("DEBUG: Setting g_in_session = true (BEFORE UI update)\n");
+
         // Initialize audio playback system
         if (!g_audio_playback) {
             printf("Initializing audio playback system...\n");
@@ -202,13 +206,19 @@ public:
             }
         }
 
-        // Update UI on main thread
+        // Update UI on main thread - try direct call first
         printf("Updating UI status...\n");
-        QMetaObject::invokeMethod(m_mainWindow, "updateStatus",
-            Qt::QueuedConnection, Q_ARG(QString, "Session joined successfully"));
-        QMetaObject::invokeMethod(m_mainWindow, "updateButtonStates", Qt::QueuedConnection);
+        if (QThread::currentThread() == m_mainWindow->thread()) {
+            // We're already on the main thread, call directly
+            m_mainWindow->updateStatus("Session joined successfully");
+            m_mainWindow->updateButtonStates();
+        } else {
+            // Cross-thread, use blocking queued connection
+            QMetaObject::invokeMethod(m_mainWindow, "updateStatus",
+                Qt::BlockingQueuedConnection, Q_ARG(QString, "Session joined successfully"));
+            QMetaObject::invokeMethod(m_mainWindow, "updateButtonStates", Qt::BlockingQueuedConnection);
+        }
 
-        g_in_session = true;
         printf("Session state set to IN_SESSION\n");
 
         if (enableChat) {
@@ -250,10 +260,17 @@ public:
             g_audio_playback = nullptr;
         }
 
-        // Update UI on main thread
-        QMetaObject::invokeMethod(m_mainWindow, "updateStatus",
-            Qt::QueuedConnection, Q_ARG(QString, "Left session"));
-        QMetaObject::invokeMethod(m_mainWindow, "updateButtonStates", Qt::QueuedConnection);
+        // Update UI on main thread - try direct call first
+        if (QThread::currentThread() == m_mainWindow->thread()) {
+            // We're already on the main thread, call directly
+            m_mainWindow->updateStatus("Left session");
+            m_mainWindow->updateButtonStates();
+        } else {
+            // Cross-thread, use blocking queued connection
+            QMetaObject::invokeMethod(m_mainWindow, "updateStatus",
+                Qt::BlockingQueuedConnection, Q_ARG(QString, "Left session"));
+            QMetaObject::invokeMethod(m_mainWindow, "updateButtonStates", Qt::BlockingQueuedConnection);
+        }
 
         g_in_session = false;
     };
@@ -269,10 +286,17 @@ public:
             g_audio_playback = nullptr;
         }
 
-        // Update UI on main thread
-        QMetaObject::invokeMethod(m_mainWindow, "updateStatus",
-            Qt::QueuedConnection, Q_ARG(QString, "Left session"));
-        QMetaObject::invokeMethod(m_mainWindow, "updateButtonStates", Qt::QueuedConnection);
+        // Update UI on main thread - try direct call first
+        if (QThread::currentThread() == m_mainWindow->thread()) {
+            // We're already on the main thread, call directly
+            m_mainWindow->updateStatus("Left session");
+            m_mainWindow->updateButtonStates();
+        } else {
+            // Cross-thread, use blocking queued connection
+            QMetaObject::invokeMethod(m_mainWindow, "updateStatus",
+                Qt::BlockingQueuedConnection, Q_ARG(QString, "Left session"));
+            QMetaObject::invokeMethod(m_mainWindow, "updateButtonStates", Qt::BlockingQueuedConnection);
+        }
 
         g_in_session = false;
     };
@@ -281,9 +305,15 @@ public:
     {
         printf("join session errorCode : %d  detailErrorCode: %d\n", errorCode, detailErrorCode);
 
-        // Update UI on main thread
-        QMetaObject::invokeMethod(m_mainWindow, "updateStatus",
-            Qt::QueuedConnection, Q_ARG(QString, "Session error occurred"));
+        // Update UI on main thread - try direct call first
+        if (QThread::currentThread() == m_mainWindow->thread()) {
+            // We're already on the main thread, call directly
+            m_mainWindow->updateStatus("Session error occurred");
+        } else {
+            // Cross-thread, use blocking queued connection
+            QMetaObject::invokeMethod(m_mainWindow, "updateStatus",
+                Qt::BlockingQueuedConnection, Q_ARG(QString, "Session error occurred"));
+        }
     };
 
     // Other delegate methods...
@@ -441,115 +471,86 @@ QString getSelfDirPath()
 
 void joinVideoSDKSession(const QString& session_name, const QString& session_psw, const QString& session_token)
 {
-    printf("=== Starting Video SDK Session Join Process ===\n");
+    printf("=== Starting Video SDK Session Join Process (Qt-Free) ===\n");
 
-    // Debug: Print all parameters being passed
-    printf("DEBUG: Parameters received:\n");
-    printf("  session_name: '%s'\n", session_name.toStdString().c_str());
-    printf("  session_psw: '%s'\n", session_psw.toStdString().c_str());
-    printf("  session_token: '%s'\n", session_token.toStdString().c_str());
-    printf("  token_length: %lld characters\n", (long long)session_token.length());
-
-    // Basic validation (matching GTK version)
+    // Basic validation
     if (session_name.isEmpty()) {
         printf("ERROR: Session name is empty!\n");
-        QMessageBox::critical(nullptr, "Error", "Session name cannot be empty");
         return;
     }
 
     if (session_token.isEmpty()) {
         printf("ERROR: Session token is empty!\n");
-        QMessageBox::critical(nullptr, "Error", "Session token cannot be empty");
         return;
     }
 
     printf("Session Name: %s\n", session_name.toStdString().c_str());
-    printf("Token Length: %lld characters\n", (long long)session_token.length());
 
-    // Clean up any existing SDK instance (matching GTK pattern)
-    if (video_sdk_obj) {
-        printf("Cleaning up existing SDK instance...\n");
-        video_sdk_obj->leaveSession(false);
-        video_sdk_obj->cleanup();
-        DestroyZoomVideoSDKObj();
-        video_sdk_obj = nullptr;
-    }
-
-    printf("Creating Zoom Video SDK object...\n");
-    ZoomVideoSDKRawDataMemoryMode heap = ZoomVideoSDKRawDataMemoryMode::ZoomVideoSDKRawDataMemoryModeHeap;
-    video_sdk_obj = CreateZoomVideoSDKObj();
-
+    // Check if SDK is already initialized
     if (!video_sdk_obj) {
-        printf("ERROR: Failed to create Video SDK object!\n");
-        QMessageBox::critical(nullptr, "Error", "Failed to create Video SDK object");
+        printf("ERROR: SDK not initialized!\n");
         return;
     }
 
-    printf("Initializing Video SDK...\n");
-    ZoomVideoSDKInitParams init_params;
-    init_params.domain = "https://zoom.us";
-    init_params.enableLog = false;
-    init_params.logFilePrefix = "";
-    init_params.videoRawDataMemoryMode = ZoomVideoSDKRawDataMemoryModeHeap;
-    init_params.shareRawDataMemoryMode = ZoomVideoSDKRawDataMemoryModeHeap;
-    init_params.audioRawDataMemoryMode = ZoomVideoSDKRawDataMemoryModeHeap;
-    init_params.enableIndirectRawdata = false;  // CRITICAL: This was missing!
-
-
-    printf("Calling video_sdk_obj->initialize()...\n");
-    ZoomVideoSDKErrors err = video_sdk_obj->initialize(init_params);
-
-    if (err != ZoomVideoSDKErrors_Success) {
-        printf("ERROR: Failed to initialize Video SDK, error code: %d\n", (int)err);
-        QMessageBox::critical(nullptr, "Error",
-            QString("Failed to initialize Video SDK (Error: %1)").arg((int)err));
-        return;
+    // If already in a session, leave it first
+    if (g_in_session) {
+        printf("Leaving current session...\n");
+        video_sdk_obj->leaveSession(false);
+        g_in_session = false;
     }
 
-    printf("Video SDK initialized successfully\n");
+    // Temporarily disable the delegate to avoid Qt interference during join
+    printf("Temporarily disabling delegate for clean join...\n");
+    if (g_delegate) {
+        video_sdk_obj->removeListener(dynamic_cast<IZoomVideoSDKDelegate*>(g_delegate));
+    }
 
-    printf("Setting up delegate...\n");
-    g_delegate = new ZoomVideoSDKDelegate(g_mainWindow);
-    video_sdk_obj->addListener(dynamic_cast<IZoomVideoSDKDelegate*>(g_delegate));
-    printf("Delegate added successfully\n");
+    // Prepare session context (matching GTK exactly)
+    // FIX: Store std::string objects to avoid temporary destruction
+    std::string session_name_str = session_name.toStdString();
+    std::string session_psw_str = session_psw.toStdString();
+    std::string session_token_str = session_token.toStdString();
 
-    printf("Preparing session context...\n");
     ZoomVideoSDKSessionContext session_context;
-    session_context.sessionName = session_name.toStdString().c_str();
+    session_context.sessionName = session_name_str.c_str();
 
-    // Handle password - if empty, don't set it (some sessions don't require passwords)
     if (!session_psw.isEmpty()) {
-        session_context.sessionPassword = session_psw.toStdString().c_str();
-        printf("Setting session password: %s\n", session_psw.toStdString().c_str());
-    } else {
-        printf("No password provided - session may not require authentication\n");
+        session_context.sessionPassword = session_psw_str.c_str();
     }
 
     session_context.userName = "Linux Qt Bot";
-    session_context.token = session_token.toStdString().c_str();
+    session_context.token = session_token_str.c_str();
+    session_context.videoOption.localVideoOn = true;
+    session_context.audioOption.connect = true;
+    session_context.audioOption.mute = false;
 
-    // Enable both video and audio transmission (matching GTK version)
-    session_context.videoOption.localVideoOn = true;   // Start with video ON for transmission
-    session_context.audioOption.connect = true;        // Connect audio for transmission
-    session_context.audioOption.mute = false;          // Start unmuted for audio transmission
+    // DEBUG: Print all session parameters before joining
+    printf("=== SESSION JOIN PARAMETERS ===\n");
+    printf("Username: %s\n", session_context.userName);
+    printf("Session Name: %s\n", session_context.sessionName);
+    printf("Session Password: %s\n", session_context.sessionPassword ? session_context.sessionPassword : "(empty)");
+    printf("Token: %.50s...\n", session_context.token); // Truncate token for readability
+    printf("Video On: %s\n", session_context.videoOption.localVideoOn ? "true" : "false");
+    printf("Audio Connect: %s\n", session_context.audioOption.connect ? "true" : "false");
+    printf("Audio Mute: %s\n", session_context.audioOption.mute ? "true" : "false");
+    printf("===============================\n");
 
-    printf("Joining session...\n");
-    IZoomVideoSDKSession* session = NULL;
-    if (video_sdk_obj)
-        session = video_sdk_obj->joinSession(session_context);
+    // Re-enable the delegate BEFORE joining so we can receive callbacks
+    printf("Re-enabling delegate for callback handling...\n");
+    if (g_delegate) {
+        video_sdk_obj->addListener(dynamic_cast<IZoomVideoSDKDelegate*>(g_delegate));
+    }
 
-    // Access video pipe immediately after session join (matching GTK version)
-    if (session) {
-        IZoomVideoSDKUser* myself = session->getMyself();
-        if (myself) {
-            // Access video pipe immediately to initialize it properly
-            IZoomVideoSDKRawDataPipe* videoPipe = myself->GetVideoPipe();
-            if (videoPipe) {
-                printf("Video pipe accessed successfully after session join\n");
-            } else {
-                printf("Warning: Video pipe not available immediately after session join\n");
-            }
-        }
+    printf("Joining session (waiting for callback)...\n");
+    IZoomVideoSDKSession* session = video_sdk_obj->joinSession(session_context);
+
+    // Don't check session return value - success/failure comes through callbacks
+    printf("Join session request sent - waiting for callback...\n");
+
+    // Update UI to show we're attempting to join
+    if (g_mainWindow) {
+        QMetaObject::invokeMethod(g_mainWindow, "updateStatus",
+            Qt::QueuedConnection, Q_ARG(QString, "Joining session..."));
     }
 
     printf("=== Session Join Process Complete ===\n");
@@ -625,13 +626,49 @@ int main(int argc, char* argv[])
 
     mainWindow.updateStatus("Qt Video SDK Demo ready - Qt version");
 
-    // Auto-join session for testing (only if we have valid parameters)
-    if (!session_name.isEmpty() && !session_token.isEmpty()) {
-        printf("DEBUG: Auto-joining session with loaded parameters...\n");
-        QTimer::singleShot(1000, [&]() {
-            joinVideoSDKSession(session_name, session_psw, session_token);
-        });
+    // Initialize SDK for device enumeration (but don't join session yet)
+    printf("Initializing SDK for device enumeration...\n");
+    ZoomVideoSDKRawDataMemoryMode heap = ZoomVideoSDKRawDataMemoryMode::ZoomVideoSDKRawDataMemoryModeHeap;
+    video_sdk_obj = CreateZoomVideoSDKObj();
+
+    if (video_sdk_obj) {
+        ZoomVideoSDKInitParams init_params;
+        init_params.domain = "https://zoom.us";
+        init_params.enableLog = false;
+        init_params.logFilePrefix = "";
+        init_params.videoRawDataMemoryMode = ZoomVideoSDKRawDataMemoryModeHeap;
+        init_params.shareRawDataMemoryMode = ZoomVideoSDKRawDataMemoryModeHeap;
+        init_params.audioRawDataMemoryMode = ZoomVideoSDKRawDataMemoryModeHeap;
+        init_params.enableIndirectRawdata = false;
+
+        ZoomVideoSDKErrors err = video_sdk_obj->initialize(init_params);
+        if (err == ZoomVideoSDKErrors_Success) {
+            printf("SDK initialized for device enumeration\n");
+
+            // Set up delegate once during SDK initialization
+            printf("Setting up delegate...\n");
+            g_delegate = new ZoomVideoSDKDelegate(&mainWindow);
+            video_sdk_obj->addListener(dynamic_cast<IZoomVideoSDKDelegate*>(g_delegate));
+            printf("Delegate added successfully\n");
+
+            mainWindow.updateStatus("SDK initialized - populating device lists...");
+
+            // Populate device dropdowns after a short delay
+            QTimer::singleShot(500, [&mainWindow]() {
+                mainWindow.populateDeviceDropdowns();
+                mainWindow.updateStatus("Device lists populated - ready to join session");
+            });
+        } else {
+            printf("Failed to initialize SDK for device enumeration: %d\n", (int)err);
+            mainWindow.updateStatus("Failed to initialize SDK for device enumeration");
+        }
+    } else {
+        printf("Failed to create SDK object for device enumeration\n");
+        mainWindow.updateStatus("Failed to create SDK object");
     }
+
+    // Manual join only - user must click the join button
+    // Auto-join has been disabled
 
     return app.exec();
 }

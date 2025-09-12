@@ -92,25 +92,14 @@ QtMainWindow::QtMainWindow(QWidget* parent)
     m_joinButton = new QPushButton("Join Session");
     m_leaveButton = new QPushButton("Leave Session");
     m_muteAudioButton = new QPushButton("Mute Audio");
-    m_muteVideoButton = new QPushButton("Mute Video");
+    m_selfVideoButton = new QPushButton("Start Video");
 
     controlLayout->addWidget(m_joinButton);
     controlLayout->addWidget(m_leaveButton);
     controlLayout->addWidget(m_muteAudioButton);
-    controlLayout->addWidget(m_muteVideoButton);
+    controlLayout->addWidget(m_selfVideoButton);
 
     mainLayout->addLayout(controlLayout);
-
-    // Create video control buttons
-    QHBoxLayout* videoControlLayout = new QHBoxLayout();
-
-    m_selfVideoButton = new QPushButton("Start Self Video");
-    m_remoteVideoButton = new QPushButton("Stop Remote Video");
-
-    videoControlLayout->addWidget(m_selfVideoButton);
-    videoControlLayout->addWidget(m_remoteVideoButton);
-
-    mainLayout->addLayout(videoControlLayout);
 
     // Create status display
     QGroupBox* statusGroup = new QGroupBox("Status");
@@ -148,9 +137,7 @@ QtMainWindow::QtMainWindow(QWidget* parent)
     connect(m_joinButton, &QPushButton::clicked, this, &QtMainWindow::onJoinSessionClicked);
     connect(m_leaveButton, &QPushButton::clicked, this, &QtMainWindow::onLeaveSessionClicked);
     connect(m_muteAudioButton, &QPushButton::clicked, this, &QtMainWindow::onMuteAudioClicked);
-    connect(m_muteVideoButton, &QPushButton::clicked, this, &QtMainWindow::onMuteVideoClicked);
     connect(m_selfVideoButton, &QPushButton::clicked, this, &QtMainWindow::onSelfVideoClicked);
-    connect(m_remoteVideoButton, &QPushButton::clicked, this, &QtMainWindow::onRemoteVideoClicked);
 
     connect(m_cameraCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &QtMainWindow::onCameraChanged);
     connect(m_microphoneCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &QtMainWindow::onMicrophoneChanged);
@@ -176,17 +163,21 @@ void QtMainWindow::updateStatus(const QString& message)
 
 void QtMainWindow::updateButtonStates()
 {
+    printf("DEBUG: updateButtonStates() called, g_in_session = %s\n", g_in_session ? "true" : "false");
+
     m_joinButton->setEnabled(!g_in_session);
     m_leaveButton->setEnabled(g_in_session);
     m_muteAudioButton->setEnabled(g_in_session);
-    m_muteVideoButton->setEnabled(g_in_session);
     m_selfVideoButton->setEnabled(g_in_session);
-    m_remoteVideoButton->setEnabled(g_in_session);
 
     m_muteAudioButton->setText(g_audio_muted ? "Unmute Audio" : "Mute Audio");
-    m_muteVideoButton->setText(g_video_muted ? "Unmute Video" : "Mute Video");
-    m_selfVideoButton->setText(m_selfVideoEnabled ? "Stop Self Video" : "Start Self Video");
-    m_remoteVideoButton->setText(m_remoteVideoEnabled ? "Stop Remote Video" : "Start Remote Video");
+    m_selfVideoButton->setText(m_selfVideoEnabled ? "Stop Video" : "Start Video");
+
+    printf("DEBUG: Buttons updated - Join:%s, Leave:%s, Mute:%s, Video:%s\n",
+           m_joinButton->isEnabled() ? "enabled" : "disabled",
+           m_leaveButton->isEnabled() ? "enabled" : "disabled",
+           m_muteAudioButton->isEnabled() ? "enabled" : "disabled",
+           m_selfVideoButton->isEnabled() ? "enabled" : "disabled");
 }
 
 void QtMainWindow::populateDeviceDropdowns()
@@ -303,22 +294,6 @@ void QtMainWindow::onMuteAudioClicked()
     }
 }
 
-void QtMainWindow::onMuteVideoClicked()
-{
-    if (video_sdk_obj && g_in_session) {
-        IZoomVideoSDKVideoHelper* videoHelper = video_sdk_obj->getVideoHelper();
-        if (videoHelper) {
-            if (g_video_muted) {
-                videoHelper->startVideo();
-            } else {
-                videoHelper->stopVideo();
-            }
-            g_video_muted = !g_video_muted;
-            updateButtonStates();
-        }
-    }
-}
-
 void QtMainWindow::onSelfVideoClicked()
 {
     m_selfVideoEnabled = !m_selfVideoEnabled;
@@ -329,21 +304,13 @@ void QtMainWindow::onSelfVideoClicked()
         if (videoHelper) {
             if (m_selfVideoEnabled) {
                 videoHelper->startVideo();
-                updateStatus("Self video started");
+                updateStatus("Video started");
             } else {
                 videoHelper->stopVideo();
-                updateStatus("Self video stopped");
+                updateStatus("Video stopped");
             }
         }
     }
-}
-
-void QtMainWindow::onRemoteVideoClicked()
-{
-    m_remoteVideoEnabled = !m_remoteVideoEnabled;
-    updateButtonStates();
-
-    updateStatus(m_remoteVideoEnabled ? "Remote video enabled" : "Remote video disabled");
 }
 
 void QtMainWindow::onCameraChanged()

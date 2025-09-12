@@ -10,6 +10,9 @@ SDK_LIB_PATH="${SCRIPT_DIR}/src/lib/zoom_video_sdk"
 # Set library paths to prioritize SDK libraries
 export LD_LIBRARY_PATH="${SDK_QT_LIB_PATH}:${SDK_LIB_PATH}:${LD_LIBRARY_PATH}"
 
+# Force X11 platform to avoid Wayland issues
+export QT_QPA_PLATFORM=xcb
+
 # Also set Qt plugin path if needed
 export QT_QPA_PLATFORM_PLUGIN_PATH="${SDK_QT_LIB_PATH}/../plugins/platforms:${QT_QPA_PLATFORM_PLUGIN_PATH}"
 
